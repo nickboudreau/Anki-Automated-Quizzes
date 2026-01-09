@@ -1,4 +1,9 @@
 
+This is a fork of https://github.com/colecostanza/Anki-Automated-Quizzes for my own personal use.
+
+original Readme below.
+
+
 # Anki Automated Quizzes (v0.0.3)
 
 An Anki add-on that generates randomized multiple-choice quizzes from a deck.
