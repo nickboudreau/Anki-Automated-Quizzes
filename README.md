@@ -6,6 +6,7 @@ main difference are
 - slight re-organizing of the menu to include Card types
 - some minor UI preference changes like increasing the font size of the questions, and the styling of the questions
 
+
 original Readme below.
 
 
