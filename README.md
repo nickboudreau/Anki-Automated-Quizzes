@@ -2,6 +2,7 @@
 This is a fork of https://github.com/colecostanza/Anki-Automated-Quizzes for my own personal use.
 
 main differences are 
+- can change font size
 - ability to choose Card types (new/learn/due/review)
 - slight re-organizing of the menu to include Card types
 - some minor UI preference changes like increasing the font size of the questions, and the styling of the questions
