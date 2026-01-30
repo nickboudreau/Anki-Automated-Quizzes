@@ -14,7 +14,9 @@ from aqt.qt import (
     QCheckBox,
     QMessageBox,
     QGroupBox,
-    QAbstractItemView
+    QAbstractItemView,
+    QTreeWidget,
+    QTreeWidgetItem
 )
 from aqt.utils import tooltip
 from PyQt6.QtCore import Qt
@@ -214,7 +216,7 @@ class OptionRow(QWidget):
         self.label.setText(self.raw_html if self.raw_html.strip() else "<i>(blank)</i>")
         self.label.setMinimumWidth(400)
         self.label.setMaximumWidth(700)
-        self.setStyleSheet("font-size: 14px;")
+        # self.setStyleSheet("font-size: 14px;")
         row.addWidget(self.label, 1)
         row.addStretch()
 
@@ -245,6 +247,8 @@ class MCQuizDialog(QDialog):
         self.cfg.setdefault("last_answer_field", "")
         self.cfg.setdefault("num_per_page", 5)
         self.cfg.setdefault("card_states", ["learn, due"])
+        self.cfg.setdefault("font_size_q", 22)
+        self.cfg.setdefault("font_size_a", 14)
 
         layout = QVBoxLayout(self)
 
@@ -437,6 +441,44 @@ class MCQuizDialog(QDialog):
         self.prev_btn.clicked.connect(self._on_prev_page)
         self.prev_btn.hide()
         layout.addWidget(self.prev_btn)
+        
+        # font control
+        fontLayout = QHBoxLayout()
+        self.font_btn = QPushButton(">")
+        self.font_btn.setFixedWidth(40) 
+        self.font_btn.setFixedHeight(25) 
+        self.font_btn.setStyleSheet("padding: 0px;")
+        self.font_btn.clicked.connect(self._on_font_button)
+        fontLayout.addWidget(self.font_btn)
+        fontLayout.addStretch()
+        
+        self.qf_label = QLabel("Question font size:")
+        fontLayout.addWidget(self.qf_label)
+        self.qfontsize = QSpinBox(self.config_widget); self.qfontsize.setRange(6, 40); self.qfontsize.setValue(int(self.cfg["font_size_q"]))
+        self.qfontsize.setFixedWidth(50) 
+        fontLayout.addWidget(self.qfontsize)
+        
+        self.af_label = QLabel("Answer font size:")
+        fontLayout.addWidget(self.af_label)
+        self.afontsize = QSpinBox(self.config_widget); self.afontsize.setRange(6, 40); self.afontsize.setValue(int(self.cfg["font_size_a"]))
+        self.afontsize.setFixedWidth(50) 
+        fontLayout.addWidget(self.afontsize)
+        
+        self.fontframe = QFrame()
+        self.fontframe.setLayout(fontLayout)
+        self.fontframe.setFixedHeight(25) 
+        fontLayout.setContentsMargins(0, 0, 0, 0)
+        self.fontframe.setContentsMargins(0, 0, 0, 0)
+        self.fontframe.hide()
+        layout.addWidget(self.fontframe)
+        
+        self.qfontsize.valueChanged.connect(self._on_font_changed)
+        self.afontsize.valueChanged.connect(self._on_font_changed)
+        
+        self.qf_label.hide()
+        self.qfontsize.hide()
+        self.af_label.hide()
+        self.afontsize.hide()
 
         # Signals
         self.deck_cb.currentTextChanged.connect(self._on_deck_changed)
@@ -448,6 +490,37 @@ class MCQuizDialog(QDialog):
         self.state = {"quiz": [], "idx": 0, "correct": 0, "total": 0, "page": 0, "per_page": 1}
         self.current_question_widgets = []
         self.user_answers = {}  # quiz index -> chosen raw html
+
+    def _on_font_button(self):
+        val = self.font_btn.text()
+        if val == "<":
+            self.font_btn.setText(">")
+            self.qf_label.hide()
+            self.qfontsize.hide()
+            self.af_label.hide()
+            self.afontsize.hide()
+        else:
+            self.font_btn.setText("<")
+            self.qf_label.show()
+            self.qfontsize.show()
+            self.af_label.show()
+            self.afontsize.show()
+
+    def _on_font_changed(self):
+        
+        for qlabel in self.qlabels:
+            qlabel.setStyleSheet("font-size: " + str(self.qfontsize.value()) + "px;")
+            
+        for alabel in self.alabels:
+            alabel.setStyleSheet("font-size: " + str(self.afontsize.value()) + "px;")
+        
+        self.cfg["font_size_q"] = int(self.qfontsize.value())
+        self.cfg["font_size_a"] = int(self.afontsize.value())
+        
+        try:
+            mw.addonManager.writeConfig(__name__, self.cfg)
+        except Exception:
+            pass
 
     def _on_card_type_select(self):
         sender = self.sender()
@@ -572,7 +645,7 @@ class MCQuizDialog(QDialog):
                                 f"Could not build quiz: {e}\n"
                                 f"Notes available: {len(qa)}")
             return
-
+        
         # persist choices
         self.cfg["default_deck"] = deck
         self.cfg["num_choices"] = num_c
@@ -583,6 +656,7 @@ class MCQuizDialog(QDialog):
         self.cfg["last_answer_field"] = answer_field
         self.cfg["num_per_page"] = int(self.qperpage.value())
         self.cfg["card_states"] = card_states
+        
         try:
             mw.addonManager.writeConfig(__name__, self.cfg)
         except Exception:
@@ -614,6 +688,7 @@ class MCQuizDialog(QDialog):
         total = self.state["total"]
 
         if idx >= total:
+            self.fontframe.hide()
             self.next_btn.hide()
             self.prev_btn.hide()
             self._show_results_page()
@@ -621,6 +696,9 @@ class MCQuizDialog(QDialog):
 
         end = min(idx + per_page, total)
         self.page_option_rows = []
+        
+        self.qlabels = list()
+        self.alabels = list()
 
         for i, qidx in enumerate(range(idx, end)):
             q = quiz[qidx]
@@ -629,19 +707,22 @@ class MCQuizDialog(QDialog):
             group_widget.setStyleSheet("QGroupBox { border: 2px solid #afafaf; border-radius: 10px; margin-top: 10px; padding: 10px; }")
             
             q_label = QLabel(f"Q{qidx+1}: {_strip_html(q['prompt'])}")
-            q_label.setStyleSheet("font-size: 22px;")
+            q_label.setStyleSheet("font-size: " + str(self.qfontsize.value()) + "px;")
             q_label.setWordWrap(True)
             q_label.setMaximumWidth(820)
             q_group.addWidget(q_label)
+            self.qlabels.append(q_label)
 
             rows = []
             for opt in q["options"]:
                 row = OptionRow(opt, self)
+                row.setStyleSheet("font-size: " + str(self.cfg["font_size_a"]) + "px;")
                 # clicking the radio selects and finalizes the question
                 row.radio.toggled.connect(partial(self._on_choose, i, row, group_widget))
                 q_group.addWidget(row)
                 rows.append(row)
                 self.current_question_widgets.append(row)
+                self.alabels.append(row)
             self.page_option_rows.append(rows)
 
             group_widget.setLayout(q_group)
@@ -662,6 +743,8 @@ class MCQuizDialog(QDialog):
             self.prev_btn.show()
         else:
             self.prev_btn.hide()
+            
+        self.fontframe.show()
 
         # --- Auto-scroll to top ---
         self.scroll_area.verticalScrollBar().setValue(0)
@@ -787,6 +870,7 @@ class MCQuizDialog(QDialog):
         self.config_widget.show()
         self.next_btn.hide()
         self.prev_btn.hide()
+        self.fontframe.hide()
 
     def _on_clear_history(self):
         path = _history_path()
