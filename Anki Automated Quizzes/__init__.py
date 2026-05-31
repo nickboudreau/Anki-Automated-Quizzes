@@ -34,6 +34,8 @@ QUESTIONS_WIDTH: Final = 900
 QUESTIONS_HEIGHT: Final = 758
 
 # ---- Cross-version helpers ----
+
+
 def _deck_tuple(dni):
     if hasattr(dni, "id") and hasattr(dni, "name"):
         return (dni.id, dni.name)
@@ -42,6 +44,7 @@ def _deck_tuple(dni):
     except Exception:
         return (getattr(dni, "id", None), str(dni))
 
+
 def _get_all_decks():
     try:
         items = mw.col.decks.all_names_and_ids()
@@ -49,11 +52,13 @@ def _get_all_decks():
         items = mw.col.decks.allNamesAndIds()
     return [_deck_tuple(d) for d in items]
 
+
 def _note_type_obj(note):
     try:
         return note.note_type()  # New API
     except Exception:
         return note.model()      # Old API
+
 
 def _note_type_name(note):
     nt = _note_type_obj(note)
@@ -65,6 +70,7 @@ def _note_type_name(note):
         except Exception:
             return str(nt)
 
+
 def _field_names_for_model(model_obj):
     try:
         return list(model_obj.field_names())
@@ -75,10 +81,11 @@ def _field_names_for_model(model_obj):
     except Exception:
         return []
 
+
 def _find_notes_in_deck(self, deck_name, exclude_tags):
     tag_filter = " ".join(f'-tag:"{t}"' for t in exclude_tags if t)
     state_filter = ""
-    
+
     states = []
     if self.newCards.isChecked():
         states.append("new")
@@ -88,14 +95,15 @@ def _find_notes_in_deck(self, deck_name, exclude_tags):
         states.append("due")
     if self.reviewCards.isChecked():
         states.append("review")
-        
+
     state_filter = " OR ".join(f'is:"{s}"' for s in states if s)
     if len(state_filter) > 0:
         state_filter = "(" + state_filter + ")"
-        
+
     filters = " ".join([tag_filter, state_filter]).strip()
     query = f'deck:"{deck_name}" {filters}'.strip()
     return mw.col.find_notes(query)
+
 
 def _collect_models_and_fields(nids):
     """Return mapping: model_name -> (model_obj, field_names)."""
@@ -115,16 +123,19 @@ def _collect_models_and_fields(nids):
         res[mname] = (mobj, fields)
     return res
 
+
 def _strip_html(text: str) -> str:
     text = re.sub(r"<br\s*/?>", "\n", text or "", flags=re.IGNORECASE)
     text = re.sub(r"</?[^>]+>", "", text or "")
     return text.strip()
+
 
 def _normalize_html(s: str) -> str:
     """Normalize for equality checks: collapse whitespace, lower, strip."""
     s = (s or "").replace("\r", "").replace("\n", "").strip().lower()
     s = re.sub(r"\s+", " ", s)
     return s
+
 
 def _notes_to_qa(notes, prompt_field, answer_field, required_model_name=None):
     qa = []
@@ -138,9 +149,16 @@ def _notes_to_qa(notes, prompt_field, answer_field, required_model_name=None):
             continue
         front = (n[prompt_field] or "").strip()
         back = (n[answer_field] or "").strip()
+        # Scale IMG
+        front = front.replace(
+            "<img ", '<img style="max-width: 100%; height: auto;" ')
+        back = back.replace(
+            "<img ", '<img style="max-width: 100%; height: auto;" ')
+        #
         if front and back:
             qa.append({"nid": nid, "prompt": front, "answer": back})
     return qa
+
 
 def _make_quiz_items(qa, num_questions, num_choices, allow_answer_reuse: bool):
     if len(qa) == 0:
@@ -156,13 +174,15 @@ def _make_quiz_items(qa, num_questions, num_choices, allow_answer_reuse: bool):
         options = [correct]
 
         if allow_answer_reuse:
-            unique_others = [a for a in set(all_answers) if _normalize_html(a) != _normalize_html(correct)]
+            unique_others = [a for a in set(all_answers) if _normalize_html(
+                a) != _normalize_html(correct)]
             random.shuffle(unique_others)
             options += unique_others[:max(0, num_choices - 1)]
             while len(options) < num_choices:
                 options.append(random.choice(all_answers))
         else:
-            candidates = [a for a in set(all_answers) if _normalize_html(a) != _normalize_html(correct)]
+            candidates = [a for a in set(all_answers) if _normalize_html(
+                a) != _normalize_html(correct)]
             random.shuffle(candidates)
             options += candidates[:max(0, num_choices - 1)]
 
@@ -178,9 +198,12 @@ def _make_quiz_items(qa, num_questions, num_choices, allow_answer_reuse: bool):
     return quiz
 
 # Quiz history helpers
+
+
 def _history_path():
     addon_folder = os.path.dirname(__file__)
     return os.path.join(addon_folder, "quiz_history.json")
+
 
 def _load_history():
     try:
@@ -189,6 +212,7 @@ def _load_history():
     except Exception:
         return set()
 
+
 def _save_history(nid_list):
     history = _load_history()
     history.update(nid_list)
@@ -196,24 +220,28 @@ def _save_history(nid_list):
         json.dump(list(history), f)
 
 # ---- Option row widget (Radio + HTML label) ----
+
+
 class OptionRow(QWidget):
     def __init__(self, html_text: str, parent=None):
         super().__init__(parent)
         self.raw_html = html_text or ""
         row = QHBoxLayout(self)
-        row.setSpacing(0) # column spacing
+        row.setSpacing(0)  # column spacing
         row.setContentsMargins(0, 4, 0, 4)
         self.radio = QRadioButton(self)
         self.radio.setFixedWidth(50)
         row.addWidget(self.radio, 0)
         self.label = QLabel(self)
         self.label.setTextFormat(Qt.TextFormat.RichText)
-        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        self.label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction)
         self.label.setOpenExternalLinks(True)
         self.label.setWordWrap(True)
-        
+
         # Render raw HTML; if actually empty, show a placeholder
-        self.label.setText(self.raw_html if self.raw_html.strip() else "<i>(blank)</i>")
+        self.label.setText(
+            self.raw_html if self.raw_html.strip() else "<i>(blank)</i>")
         self.label.setMinimumWidth(400)
         self.label.setMaximumWidth(700)
         # self.setStyleSheet("font-size: 14px;")
@@ -228,7 +256,9 @@ class OptionRow(QWidget):
         self.label.setEnabled(enabled)
 
     def set_background(self, color_css: str):
-        self.setStyleSheet(f"QWidget {{ background: {color_css}; border-radius: 6px; }}")
+        self.setStyleSheet(
+            f"QWidget {{ background: {color_css}; border-radius: 6px; }}")
+
 
 class MCQuizDialog(QDialog):
     def __init__(self, parent=None):
@@ -280,19 +310,19 @@ class MCQuizDialog(QDialog):
         # --- left column ---
         leftColumn = QVBoxLayout()
         leftColumn.setContentsMargins(0, 0, 15, 0)
-        
+
         # Prompt field
         promptFieldRow = QHBoxLayout()
         promptFieldLabel = QLabel("Prompt field:")
-        promptFieldLabel.setFixedWidth(120) 
+        promptFieldLabel.setFixedWidth(120)
         promptFieldRow.addWidget(promptFieldLabel, 0)
         self.prompt_cb = QComboBox(self.config_widget)
         promptFieldRow.addWidget(self.prompt_cb, 1)
-        
+
         # Answer field
         answerFieldRow = QHBoxLayout()
         anwerFieldLabel = QLabel("Answer field:")
-        anwerFieldLabel.setFixedWidth(120) 
+        anwerFieldLabel.setFixedWidth(120)
         answerFieldRow.addWidget(anwerFieldLabel, 0)
         self.answer_cb = QComboBox(self.config_widget)
         answerFieldRow.addWidget(self.answer_cb, 1)
@@ -300,39 +330,45 @@ class MCQuizDialog(QDialog):
         # Questions
         questionsRow = QHBoxLayout()
         questionsLabel = QLabel("Questions:")
-        questionsLabel.setFixedWidth(120) 
+        questionsLabel.setFixedWidth(120)
         questionsRow.addWidget(questionsLabel, 0)
-        self.qcount = QSpinBox(self.config_widget); self.qcount.setRange(1, 1000); self.qcount.setValue(int(self.cfg["num_questions"]))
+        self.qcount = QSpinBox(self.config_widget)
+        self.qcount.setRange(1, 1000)
+        self.qcount.setValue(int(self.cfg["num_questions"]))
         questionsRow.addWidget(self.qcount, 1)
-        
+
         # Choices
         choicesRow = QHBoxLayout()
         choicesLabel = QLabel("Choices:")
-        choicesLabel.setFixedWidth(120) 
+        choicesLabel.setFixedWidth(120)
         choicesRow.addWidget(choicesLabel, 0)
-        self.ccount = QSpinBox(self.config_widget); self.ccount.setRange(2, 10); self.ccount.setValue(int(self.cfg["num_choices"]))
+        self.ccount = QSpinBox(self.config_widget)
+        self.ccount.setRange(2, 10)
+        self.ccount.setValue(int(self.cfg["num_choices"]))
         choicesRow.addWidget(self.ccount, 1)
-        
+
         # Questions per page
         questionsPerPageRow = QHBoxLayout()
         questionsPerPageLabel = QLabel("Questions per page:")
-        questionsPerPageLabel.setFixedWidth(120) 
+        questionsPerPageLabel.setFixedWidth(120)
         questionsPerPageRow.addWidget(questionsPerPageLabel, 0)
-        self.qperpage = QSpinBox(self.config_widget); self.qperpage.setRange(1, 20); self.qperpage.setValue(int(self.cfg.get("num_per_page", 5)))
+        self.qperpage = QSpinBox(self.config_widget)
+        self.qperpage.setRange(1, 20)
+        self.qperpage.setValue(int(self.cfg.get("num_per_page", 5)))
         questionsPerPageRow.addWidget(self.qperpage, 1)
-        
+
         leftColumn.addLayout(promptFieldRow)
         leftColumn.addLayout(answerFieldRow)
         leftColumn.addLayout(questionsRow)
         leftColumn.addLayout(choicesRow)
         leftColumn.addLayout(questionsPerPageRow)
-        
+
         leftColumnPanel = QWidget()
         leftColumnPanel.setLayout(leftColumn)
         leftColumnPanel.setContentsMargins(0, 12, 0, 0)
-        
+
         middleColumns.addWidget(leftColumnPanel)
-        
+
         # --- right column ---
         rightColumn = QVBoxLayout()
         rightColumn.setContentsMargins(10, 10, 2, 0)
@@ -340,16 +376,16 @@ class MCQuizDialog(QDialog):
         cardSelectBox.setFixedWidth(130)
         cardSelectBoxLayout = QVBoxLayout()
         cardSelectBox.setLayout(cardSelectBoxLayout)
-        
+
         # Card types
         self.allCards = QCheckBox("Select all", self.config_widget)
         self.newCards = QCheckBox("New cards", self.config_widget)
         self.learnCards = QCheckBox("Learn cards", self.config_widget)
         self.dueCards = QCheckBox("Due cards", self.config_widget)
         self.reviewCards = QCheckBox("Review cards", self.config_widget)
-        
+
         card_states = self.cfg["card_states"]
-        
+
         if "new" in card_states:
             self.newCards.setChecked(True)
         if "learn" in card_states:
@@ -360,33 +396,33 @@ class MCQuizDialog(QDialog):
             self.reviewCards.setChecked(True)
         if self.newCards.isChecked() and self.learnCards.isChecked() and self.dueCards.isChecked() and self.reviewCards.isChecked():
             self.allCards.setChecked(True)
-        
+
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         separator.setFixedWidth(105)
         separator.setContentsMargins(8, 0, 0, 0)
-        
+
         cardSelectBoxLayout.addWidget(self.allCards)
         cardSelectBoxLayout.addWidget(separator)
         cardSelectBoxLayout.addWidget(self.newCards)
         cardSelectBoxLayout.addWidget(self.learnCards)
         cardSelectBoxLayout.addWidget(self.dueCards)
         cardSelectBoxLayout.addWidget(self.reviewCards)
-        
+
         # listeners to auto check all/none
         self.allCards.stateChanged.connect(self._on_card_type_select)
         self.newCards.stateChanged.connect(self._on_card_type_select)
         self.learnCards.stateChanged.connect(self._on_card_type_select)
         self.dueCards.stateChanged.connect(self._on_card_type_select)
         self.reviewCards.stateChanged.connect(self._on_card_type_select)
-        
+
         cardTypesLabel = QLabel("Card types:")
         cardTypesLabel.setContentsMargins(3, 0, 0, 0)
         rightColumn.addWidget(cardTypesLabel)
         rightColumn.addWidget(cardSelectBox)
         rightColumn.addStretch()
-        
+
         middleColumns.addLayout(rightColumn)
         config_layout.addLayout(middleColumns)
 
@@ -399,18 +435,21 @@ class MCQuizDialog(QDialog):
         config_layout.addWidget(QLabel("Exclude tags (optional):"))
         self.tags_list = QListWidget(self.config_widget)
         self.tags_list.setFixedHeight(100)
-        self.tags_list.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+        self.tags_list.setEditTriggers(
+            QAbstractItemView.EditTrigger.AllEditTriggers)
         for t in self.cfg["exclude_tags"]:
             self.tags_list.addItem(QListWidgetItem(t))
         config_layout.addWidget(self.tags_list)
 
         # Exclude cards from previous quizzes
-        self.exclude_history_cb = QCheckBox("Exclude cards from previous quizzes", self.config_widget)
+        self.exclude_history_cb = QCheckBox(
+            "Exclude cards from previous quizzes", self.config_widget)
         self.exclude_history_cb.setChecked(False)
         config_layout.addWidget(self.exclude_history_cb)
 
         # Clear quiz history
-        self.clear_history_btn = QPushButton("Clear Quiz History", self.config_widget)
+        self.clear_history_btn = QPushButton(
+            "Clear Quiz History", self.config_widget)
         self.clear_history_btn.clicked.connect(self._on_clear_history)
         config_layout.addWidget(self.clear_history_btn)
 
@@ -441,40 +480,44 @@ class MCQuizDialog(QDialog):
         self.prev_btn.clicked.connect(self._on_prev_page)
         self.prev_btn.hide()
         layout.addWidget(self.prev_btn)
-        
+
         # font control
         fontLayout = QHBoxLayout()
         self.font_btn = QPushButton(">")
-        self.font_btn.setFixedWidth(40) 
-        self.font_btn.setFixedHeight(25) 
+        self.font_btn.setFixedWidth(40)
+        self.font_btn.setFixedHeight(25)
         self.font_btn.setStyleSheet("padding: 0px;")
         self.font_btn.clicked.connect(self._on_font_button)
         fontLayout.addWidget(self.font_btn)
         fontLayout.addStretch()
-        
+
         self.qf_label = QLabel("Question font size:")
         fontLayout.addWidget(self.qf_label)
-        self.qfontsize = QSpinBox(self.config_widget); self.qfontsize.setRange(6, 40); self.qfontsize.setValue(int(self.cfg["font_size_q"]))
-        self.qfontsize.setFixedWidth(50) 
+        self.qfontsize = QSpinBox(self.config_widget)
+        self.qfontsize.setRange(6, 40)
+        self.qfontsize.setValue(int(self.cfg["font_size_q"]))
+        self.qfontsize.setFixedWidth(50)
         fontLayout.addWidget(self.qfontsize)
-        
+
         self.af_label = QLabel("Answer font size:")
         fontLayout.addWidget(self.af_label)
-        self.afontsize = QSpinBox(self.config_widget); self.afontsize.setRange(6, 40); self.afontsize.setValue(int(self.cfg["font_size_a"]))
-        self.afontsize.setFixedWidth(50) 
+        self.afontsize = QSpinBox(self.config_widget)
+        self.afontsize.setRange(6, 40)
+        self.afontsize.setValue(int(self.cfg["font_size_a"]))
+        self.afontsize.setFixedWidth(50)
         fontLayout.addWidget(self.afontsize)
-        
+
         self.fontframe = QFrame()
         self.fontframe.setLayout(fontLayout)
-        self.fontframe.setFixedHeight(25) 
+        self.fontframe.setFixedHeight(25)
         fontLayout.setContentsMargins(0, 0, 0, 0)
         self.fontframe.setContentsMargins(0, 0, 0, 0)
         self.fontframe.hide()
         layout.addWidget(self.fontframe)
-        
+
         self.qfontsize.valueChanged.connect(self._on_font_changed)
         self.afontsize.valueChanged.connect(self._on_font_changed)
-        
+
         self.qf_label.hide()
         self.qfontsize.hide()
         self.af_label.hide()
@@ -487,7 +530,8 @@ class MCQuizDialog(QDialog):
         # Init
         self._on_deck_changed(self.deck_cb.currentText())
 
-        self.state = {"quiz": [], "idx": 0, "correct": 0, "total": 0, "page": 0, "per_page": 1}
+        self.state = {"quiz": [], "idx": 0, "correct": 0,
+                      "total": 0, "page": 0, "per_page": 1}
         self.current_question_widgets = []
         self.user_answers = {}  # quiz index -> chosen raw html
 
@@ -507,16 +551,18 @@ class MCQuizDialog(QDialog):
             self.afontsize.show()
 
     def _on_font_changed(self):
-        
+
         for qlabel in self.qlabels:
-            qlabel.setStyleSheet("font-size: " + str(self.qfontsize.value()) + "px;")
-            
+            qlabel.setStyleSheet(
+                "font-size: " + str(self.qfontsize.value()) + "px;")
+
         for alabel in self.alabels:
-            alabel.setStyleSheet("font-size: " + str(self.afontsize.value()) + "px;")
-        
+            alabel.setStyleSheet(
+                "font-size: " + str(self.afontsize.value()) + "px;")
+
         self.cfg["font_size_q"] = int(self.qfontsize.value())
         self.cfg["font_size_a"] = int(self.afontsize.value())
-        
+
         try:
             mw.addonManager.writeConfig(__name__, self.cfg)
         except Exception:
@@ -524,20 +570,20 @@ class MCQuizDialog(QDialog):
 
     def _on_card_type_select(self):
         sender = self.sender()
-        
+
         if sender is self.allCards:
             self.newCards.blockSignals(True)
             self.newCards.setChecked(self.allCards.isChecked())
             self.newCards.blockSignals(False)
-            
+
             self.learnCards.blockSignals(True)
             self.learnCards.setChecked(self.allCards.isChecked())
             self.learnCards.blockSignals(False)
-            
+
             self.dueCards.blockSignals(True)
             self.dueCards.setChecked(self.allCards.isChecked())
             self.dueCards.blockSignals(False)
-            
+
             self.reviewCards.blockSignals(True)
             self.reviewCards.setChecked(self.allCards.isChecked())
             self.reviewCards.blockSignals(False)
@@ -589,13 +635,15 @@ class MCQuizDialog(QDialog):
         else:
             for guess in ("Front", "Question", "Prompt"):
                 if guess in fields:
-                    self.prompt_cb.setCurrentText(guess); break
+                    self.prompt_cb.setCurrentText(guess)
+                    break
         if self.cfg.get("last_answer_field") in fields:
             self.answer_cb.setCurrentText(self.cfg["last_answer_field"])
         else:
             for guess in ("Back", "Answer", "Response"):
                 if guess in fields:
-                    self.answer_cb.setCurrentText(guess); break
+                    self.answer_cb.setCurrentText(guess)
+                    break
 
         self.prompt_cb.blockSignals(False)
         self.answer_cb.blockSignals(False)
@@ -607,11 +655,12 @@ class MCQuizDialog(QDialog):
     def start_quiz(self):
         self.resize(QUESTIONS_WIDTH, QUESTIONS_HEIGHT)
         deck = self.deck_cb.currentText()
-        exclude = [self.tags_list.item(i).text() for i in range(self.tags_list.count())]
+        exclude = [self.tags_list.item(i).text()
+                   for i in range(self.tags_list.count())]
         num_q = int(self.qcount.value())
         num_c = int(self.ccount.value())
         allow_dup = bool(self.dup_cb.isChecked())
-        
+
         card_states = []
         if self.newCards.isChecked():
             card_states.append("new")
@@ -630,7 +679,8 @@ class MCQuizDialog(QDialog):
         if self.exclude_history_cb.isChecked():
             used_nids = _load_history()
             nids = [nid for nid in nids if nid not in used_nids]
-        qa = _notes_to_qa(nids, prompt_field, answer_field, required_model_name=model_name)
+        qa = _notes_to_qa(nids, prompt_field, answer_field,
+                          required_model_name=model_name)
 
         if len(qa) == 0:
             QMessageBox.warning(self, "No matching notes",
@@ -645,7 +695,7 @@ class MCQuizDialog(QDialog):
                                 f"Could not build quiz: {e}\n"
                                 f"Notes available: {len(qa)}")
             return
-        
+
         # persist choices
         self.cfg["default_deck"] = deck
         self.cfg["num_choices"] = num_c
@@ -656,7 +706,7 @@ class MCQuizDialog(QDialog):
         self.cfg["last_answer_field"] = answer_field
         self.cfg["num_per_page"] = int(self.qperpage.value())
         self.cfg["card_states"] = card_states
-        
+
         try:
             mw.addonManager.writeConfig(__name__, self.cfg)
         except Exception:
@@ -696,7 +746,7 @@ class MCQuizDialog(QDialog):
 
         end = min(idx + per_page, total)
         self.page_option_rows = []
-        
+
         self.qlabels = list()
         self.alabels = list()
 
@@ -704,10 +754,12 @@ class MCQuizDialog(QDialog):
             q = quiz[qidx]
             q_group = QVBoxLayout()
             group_widget = QGroupBox()
-            group_widget.setStyleSheet("QGroupBox { border: 2px solid #afafaf; border-radius: 10px; margin-top: 10px; padding: 10px; }")
-            
+            group_widget.setStyleSheet(
+                "QGroupBox { border: 2px solid #afafaf; border-radius: 10px; margin-top: 10px; padding: 10px; }")
+
             q_label = QLabel(f"Q{qidx+1}: {_strip_html(q['prompt'])}")
-            q_label.setStyleSheet("font-size: " + str(self.qfontsize.value()) + "px;")
+            q_label.setStyleSheet(
+                "font-size: " + str(self.qfontsize.value()) + "px;")
             q_label.setWordWrap(True)
             q_label.setMaximumWidth(820)
             q_group.addWidget(q_label)
@@ -716,9 +768,11 @@ class MCQuizDialog(QDialog):
             rows = []
             for opt in q["options"]:
                 row = OptionRow(opt, self)
-                row.setStyleSheet("font-size: " + str(self.cfg["font_size_a"]) + "px;")
+                row.setStyleSheet(
+                    "font-size: " + str(self.cfg["font_size_a"]) + "px;")
                 # clicking the radio selects and finalizes the question
-                row.radio.toggled.connect(partial(self._on_choose, i, row, group_widget))
+                row.radio.toggled.connect(
+                    partial(self._on_choose, i, row, group_widget))
                 q_group.addWidget(row)
                 rows.append(row)
                 self.current_question_widgets.append(row)
@@ -726,8 +780,9 @@ class MCQuizDialog(QDialog):
             self.page_option_rows.append(rows)
 
             group_widget.setLayout(q_group)
-            group_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-            
+            group_widget.setSizePolicy(
+                QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+
             self.quiz_container.addWidget(group_widget)
             self.current_question_widgets.append(q_label)
             self.current_question_widgets.append(group_widget)
@@ -743,7 +798,7 @@ class MCQuizDialog(QDialog):
             self.prev_btn.show()
         else:
             self.prev_btn.hide()
-            
+
         self.fontframe.show()
 
         # --- Auto-scroll to top ---
@@ -768,12 +823,12 @@ class MCQuizDialog(QDialog):
         # peer rows for this question
         rows = self.page_option_rows[question_idx_in_page]
         # lock and colorize
-        
+
         isCorrect = True
         for row in rows:
             row.radio.setEnabled(False)
             row.label.mousePressEvent = lambda event: event.ignore()
-            
+
             if _normalize_html(row.raw_html) == _normalize_html(correct_raw):
                 row.radio.setText("✔")
                 row.radio.setStyleSheet("QRadioButton { color: green; }")
@@ -781,12 +836,14 @@ class MCQuizDialog(QDialog):
                 row.radio.setText("✘")
                 row.radio.setStyleSheet("QRadioButton { color: red; }")
                 isCorrect = False
-        
+
         if isCorrect:
-            group_widget.setStyleSheet("QGroupBox { border: 2px solid green; border-radius: 10px; margin-top: 10px; padding: 10px; }")
+            group_widget.setStyleSheet(
+                "QGroupBox { border: 2px solid green; border-radius: 10px; margin-top: 10px; padding: 10px; }")
         else:
-            group_widget.setStyleSheet("QGroupBox { border: 2px solid red; border-radius: 10px; margin-top: 10px; padding: 10px; }")
-        
+            group_widget.setStyleSheet(
+                "QGroupBox { border: 2px solid red; border-radius: 10px; margin-top: 10px; padding: 10px; }")
+
         if _normalize_html(chosen_raw) == _normalize_html(correct_raw):
             self.state["correct"] += 1
 
@@ -806,7 +863,8 @@ class MCQuizDialog(QDialog):
         correct = self.state["correct"]
 
         pct = round(100 * correct / max(1, total))
-        summary = QLabel(f"<b>Quiz Complete!</b><br>Score: {correct}/{total} ({pct}%)")
+        summary = QLabel(
+            f"<b>Quiz Complete!</b><br>Score: {correct}/{total} ({pct}%)")
         self.quiz_container.addWidget(summary)
         self.current_question_widgets.append(summary)
 
@@ -816,7 +874,8 @@ class MCQuizDialog(QDialog):
             ua_raw = self.user_answers.get(i, "")
             ua_txt = _strip_html(ua_raw)
             ca_txt = _strip_html(q["correct"])
-            color = "#cfc" if _normalize_html(ua_raw) == _normalize_html(q["correct"]) else "#fcc"
+            color = "#cfc" if _normalize_html(
+                ua_raw) == _normalize_html(q["correct"]) else "#fcc"
             prompt_txt = _strip_html(q["prompt"])
             html += f"<tr style='color:black;background:{color};'><td>{i+1}</td><td>{prompt_txt}</td><td>{ua_txt}</td><td>{ca_txt}</td></tr>"
         html += "</table>"
@@ -848,12 +907,14 @@ class MCQuizDialog(QDialog):
             ua_raw = self.user_answers.get(i, "")
             ua_txt = _strip_html(ua_raw)
             ca_txt = _strip_html(q["correct"])
-            color = "#cfc" if _normalize_html(ua_raw) == _normalize_html(q["correct"]) else "#fcc"
+            color = "#cfc" if _normalize_html(
+                ua_raw) == _normalize_html(q["correct"]) else "#fcc"
             prompt_txt = _strip_html(q["prompt"])
             html += f"<tr style='background:{color}'><td>{i+1}</td><td>{prompt_txt}</td><td>{ua_txt}</td><td>{ca_txt}</td></tr>"
         html += "</table>"
 
-        fname, _ = QFileDialog.getSaveFileName(self, "Save Results", "quiz_results.html", "HTML Files (*.html)")
+        fname, _ = QFileDialog.getSaveFileName(
+            self, "Save Results", "quiz_results.html", "HTML Files (*.html)")
         if fname:
             with open(fname, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -865,7 +926,8 @@ class MCQuizDialog(QDialog):
         self.current_question_widgets.append(retry_btn)
 
     def retry_quiz(self):
-        self.state = {"quiz": [], "idx": 0, "correct": 0, "total": 0, "page": 0, "per_page": 5}
+        self.state = {"quiz": [], "idx": 0, "correct": 0,
+                      "total": 0, "page": 0, "per_page": 5}
         self.user_answers = {}
         self.config_widget.show()
         self.next_btn.hide()
@@ -881,9 +943,14 @@ class MCQuizDialog(QDialog):
             except Exception as e:
                 tooltip(f"Error clearing quiz history: {e}")
 
+
 def show_quiz_dialog():
+    # Change PWD to Anki `collection.media`
+    os.chdir(mw.col.media.dir())
+    #
     dlg = MCQuizDialog(mw)
     dlg.exec()
+
 
 action = QAction("Automated Quizzes", mw)
 action.triggered.connect(show_quiz_dialog)
